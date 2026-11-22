@@ -21,7 +21,10 @@
       <p id="context"></p>
       <div class="choices" id="choices"></div>
       <div id="waiting" hidden>
-        <button class="primary" id="speed" type="button">Speed up</button>
+        <div id="speed" role="group" tabindex="-1" aria-label="Speed Up" aria-describedby="speed-instruction" aria-keyshortcuts="Space">
+          <strong>Speed Up</strong>
+          <p id="speed-instruction">Hold the Spacebar to speed up. Release it to pause the bubbles.</p>
+        </div>
         <p id="attempt-response" role="status"></p>
       </div>
       <div id="outcome" hidden>

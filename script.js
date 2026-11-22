@@ -1,6 +1,6 @@
 const WAIT_MS = 15000;
 const BURST_MS = 720;
-const FILL_PRESSES = 7;
+const FILL_MS = 4200;
 const questions = [
   {
     prompt: 'What are your odds if you switch?',
@@ -43,14 +43,13 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 let questionIndex = 0;
 let attempts = 0;
+let heldMs = 0;
+let holdStarted = null;
 let submitted;
 let deadline;
 let escalation;
-let pulse;
-let animation;
+let animation = null;
 let bubbles = [];
-let bubbleStep = 0;
-let bubbleCount = 0;
 let burstStarted = -Infinity;
 let width = 0;
 let height = 0;
@@ -78,25 +77,6 @@ function fitBubbles() {
     };
   });
   bubbles.sort((first, second) => first.entry - second.entry);
-  bubbleCount = visibleBubbleCount();
-}
-
-function visibleBubbleCount() {
-  if (bubbleStep === 0) return 0;
-  return Math.ceil(bubbles.length * (bubbleStep / FILL_PRESSES) ** 2);
-}
-
-function advanceBubbles(now) {
-  if (bubbleStep === FILL_PRESSES) {
-    burstStarted = now;
-    bubbleStep = 0;
-    bubbleCount = 0;
-    return;
-  }
-  bubbleStep += 1;
-  const nextCount = visibleBubbleCount();
-  for (let i = bubbleCount; i < nextCount; i += 1) bubbles[i].born = now;
-  bubbleCount = nextCount;
 }
 
 function paintBubble(x, y, radius, color) {
@@ -107,6 +87,17 @@ function paintBubble(x, y, radius, color) {
 }
 
 function drawBubbles(now) {
+  animation = null;
+  if (now >= deadline) return;
+  const elapsed = holdStarted === null ? 0 : now - holdStarted;
+  const progress = Math.min(1, Math.max(0, heldMs + elapsed) / FILL_MS);
+  if (progress === 1 && burstStarted === -Infinity) {
+    burstStarted = now;
+    holdStarted = null;
+    heldMs = FILL_MS;
+    speed.classList.remove('holding');
+    waiting.hidden = true;
+  }
   const burst = Math.max(0, Math.min(1, (now - burstStarted) / BURST_MS));
   const scatter = reducedMotion.matches ? 0 : 1 - (1 - burst) ** 2;
   ink.clearRect(0, 0, width, height);
@@ -127,17 +118,23 @@ function drawBubbles(now) {
     }
   }
   ink.globalAlpha = 1;
-  const size = .38 + .62 * bubbleStep / FILL_PRESSES;
-  for (let i = 0; i < bubbleCount; i += 1) {
-    const bubble = bubbles[i];
-    const arrival = reducedMotion.matches ? 1 : Math.max(.12, Math.min(1, (now - (bubble.born ?? now - 180)) / 180));
-    paintBubble(bubble.x, bubble.y, bubble.radius * size * arrival, bubble.color);
+  if (burstStarted === -Infinity && progress > 0) {
+    const tint = 'hsl(' + (343 + 11 * progress) + ' 71% ' + (12 + 28 * progress) + '%)';
+    redField.style.setProperty('--press-tint', tint);
+    const count = Math.ceil(bubbles.length * progress ** 2);
+    const size = .25 + .75 * progress;
+    for (let i = 0; i < count; i += 1) {
+      const bubble = bubbles[i];
+      paintBubble(bubble.x, bubble.y, bubble.radius * size, bubble.color);
+    }
   }
-  if (now < deadline) animation = requestAnimationFrame(drawBubbles);
+  if (holdStarted !== null || burst < 1) animation = requestAnimationFrame(drawBubbles);
 }
 
 window.addEventListener('resize', () => {
-  if (stage.dataset.phase === 'waiting') fitBubbles();
+  if (stage.dataset.phase !== 'waiting' || redField.classList.contains('blackout')) return;
+  fitBubbles();
+  if (animation === null) drawBubbles(performance.now());
 });
 
 function showQuestion() {
@@ -171,12 +168,12 @@ function submit(index) {
   const question = questions[questionIndex];
   submitted = { correct: index === question.correct, explanation: question.explanation };
   deadline = performance.now() + WAIT_MS;
-  bubbleStep = 0;
+  heldMs = 0;
+  holdStarted = null;
   burstStarted = -Infinity;
   stage.dataset.phase = 'waiting';
   redField.classList.add('waiting');
   fitBubbles();
-  animation = requestAnimationFrame(drawBubbles);
   context.textContent = 'You chose ' + 'ABCD'[index] + ' · ' + question.options[index];
   response.textContent = '';
   byId('readout').textContent = 'Answer submitted';
@@ -200,8 +197,10 @@ function reveal() {
     return;
   }
   clearTimeout(escalation);
-  pulse?.cancel();
   cancelAnimationFrame(animation);
+  animation = null;
+  holdStarted = null;
+  speed.classList.remove('holding');
   ink.clearRect(0, 0, width, height);
   const moveFocus = document.activeElement === speed || burstStarted !== -Infinity;
   stage.dataset.phase = 'result';
@@ -214,33 +213,41 @@ function reveal() {
   title.textContent = submitted.correct ? 'Correct' : 'Incorrect';
   byId('explanation').textContent = submitted.explanation;
   byId('reflection').textContent = attempts === 0
-    ? 'You waited without pressing Speed up.'
-    : 'You pressed Speed up ' + attempts + (attempts === 1 ? ' time.' : ' times.');
+    ? 'You waited without holding the Spacebar.'
+    : 'You held the Spacebar ' + attempts + (attempts === 1 ? ' time.' : ' times.');
   outcome.hidden = false;
   again.hidden = false;
   if (moveFocus) title.focus();
 }
 
-speed.addEventListener('click', () => {
-  if (stage.dataset.phase !== 'waiting' || burstStarted !== -Infinity || performance.now() >= deadline) return;
+window.addEventListener('keydown', (event) => {
+  if (event.code !== 'Space' || stage.dataset.phase !== 'waiting') return;
+  event.preventDefault();
+  if (event.repeat || holdStarted !== null || burstStarted !== -Infinity || performance.now() >= deadline) return;
   attempts += 1;
-  const tint = Math.min(attempts / FILL_PRESSES, 1);
-  redField.style.setProperty('--press-tint', 'hsl(' + (343 + 11 * tint) + ' 71% ' + (12 + 28 * tint) + '%)');
-  advanceBubbles(performance.now());
-  response.textContent = attempts === 1
-    ? 'Request received. The answer is still pending.'
-    : 'Request ' + attempts + ' received. Still pending.';
-  pulse?.cancel();
-  if (burstStarted !== -Infinity) {
-    speed.hidden = true;
-    return;
-  }
-  const frames = reducedMotion.matches
-    ? [{ backgroundColor: '#813044' }, { backgroundColor: '#37101b' }]
-    : [{ transform: 'scale(.94)', backgroundColor: '#813044' },
-       { transform: 'scale(1)', backgroundColor: '#37101b' }];
-  pulse = speed.animate(frames, { duration: 300, easing: 'ease-out' });
+  holdStarted = performance.now();
+  speed.classList.add('holding');
+  response.textContent = 'Bubbles building…';
+  animation = requestAnimationFrame(drawBubbles);
 });
+
+function pauseBubbles() {
+  if (holdStarted === null) return;
+  const now = performance.now();
+  heldMs = Math.min(FILL_MS, heldMs + now - holdStarted);
+  holdStarted = null;
+  speed.classList.remove('holding');
+  response.textContent = 'Bubbles paused.';
+  cancelAnimationFrame(animation);
+  drawBubbles(now);
+}
+
+window.addEventListener('keyup', (event) => {
+  if (event.code !== 'Space' || stage.dataset.phase !== 'waiting') return;
+  event.preventDefault();
+  pauseBubbles();
+});
+window.addEventListener('blur', pauseBubbles);
 
 again.addEventListener('click', () => {
   questionIndex = (questionIndex + 1) % questions.length;
