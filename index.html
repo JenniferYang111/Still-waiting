@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Still Waiting</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<canvas class="red-field" id="red-field" aria-hidden="true"></canvas>
+<main>
+  <header style="margin-bottom: 1.5rem"><h1>Still Waiting</h1></header>
+  <section class="stage" id="stage" data-phase="ready" aria-label="Question and feedback">
+    <div class="screen" id="screen" hidden>
+      <p class="readout" id="readout">Answer submitted</p>
+      <p id="signal" aria-hidden="true">Pending</p>
+      <p id="reaction">Your answer is in.</p>
+    </div>
+    <div class="panel">
+      <h2 id="prompt" tabindex="-1"></h2>
+      <p id="context"></p>
+      <div class="choices" id="choices"></div>
+      <div id="waiting" hidden>
+        <button class="primary" id="speed" type="button">Speed up</button>
+        <p id="attempt-response" role="status"></p>
+      </div>
+      <div id="outcome" hidden>
+        <h3 id="outcome-title" tabindex="-1"></h3>
+        <p id="explanation"></p>
+        <p id="reflection"></p>
+      </div>
+      <button class="primary" id="again" type="button" hidden>Next Question</button>
+    </div>
+  </section>
+</main>
+<script src="script.js"></script>
+</body>
+</html>
