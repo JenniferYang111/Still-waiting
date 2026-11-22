@@ -30,9 +30,9 @@ body:has(.red-field.waiting) main { text-shadow: 0 1px 3px #260510, 0 0 12px #26
 h2, h3 { font: 400 clamp(1.6rem, 3vw, 2.15rem)/1.13 Georgia, serif; }
 .panel p, .counts { color: var(--muted); }
 .choices { display: grid; gap: .5rem; }
-.choices button { text-align: left; }
+.choices button { text-align: center; }
 .choices strong { margin-right: .45rem; color: #ffbfaa; }
-[data-phase="ready"] { max-width: 44rem; grid-template-columns: 1fr; }
+[data-phase="ready"] { max-width: 44rem; margin-inline: auto; grid-template-columns: 1fr; text-align: center; }
 #attempt-response { min-height: 3em; color: #ffcab9; }
 [hidden] { display: none !important; }
 @media (max-width: 680px) { .stage { grid-template-columns: 1fr; } .screen { min-height: 13rem; } }
