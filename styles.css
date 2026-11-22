@@ -23,9 +23,9 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid white; outli
 [data-phase="waiting"] .panel, [data-phase="waiting"] .screen { background: transparent; }
 [data-phase="waiting"] .panel p { color: var(--ink); }
 body:has(.red-field.waiting) main { text-shadow: 0 1px 3px #260510, 0 0 12px #260510; }
-#speed { padding: .75rem 1rem; background: #37101b; border: 1px solid #ffc0c9; border-radius: .65rem; text-shadow: none; }
+#speed { width: 6rem; height: 6rem; padding: .5rem; background: #37101b; border: 1px solid #ffc0c9; border-radius: 50%; text-shadow: none; touch-action: none; user-select: none; -webkit-touch-callout: none; }
 #speed.holding { background: #813044; }
-#speed-instruction { margin-top: .25rem; }
+#speed-instruction { margin-top: .6rem; }
 h2, h3 { font: 400 clamp(1.6rem, 3vw, 2.15rem)/1.13 Georgia, serif; }
 .panel p, .counts { color: var(--muted); }
 .choices { display: grid; gap: .5rem; }

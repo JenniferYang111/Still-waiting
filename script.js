@@ -1,6 +1,7 @@
 const WAIT_MS = 15000;
 const BURST_MS = 720;
 const FILL_MS = 4200;
+const HOLD_THRESHOLD_MS = 220;
 const questions = [
   {
     prompt: 'What are your odds if you switch?',
@@ -44,7 +45,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let questionIndex = 0;
 let attempts = 0;
 let heldMs = 0;
-let holdStarted = null;
+let activeHold = null;
 let submitted;
 let deadline;
 let escalation;
@@ -89,11 +90,11 @@ function paintBubble(x, y, radius, color) {
 function drawBubbles(now) {
   animation = null;
   if (now >= deadline) return;
-  const elapsed = holdStarted === null ? 0 : now - holdStarted;
+  const elapsed = measureHold(now);
   const progress = Math.min(1, Math.max(0, heldMs + elapsed) / FILL_MS);
   if (progress === 1 && burstStarted === -Infinity) {
     burstStarted = now;
-    holdStarted = null;
+    activeHold = null;
     heldMs = FILL_MS;
     speed.classList.remove('holding');
     waiting.hidden = true;
@@ -128,7 +129,7 @@ function drawBubbles(now) {
       paintBubble(bubble.x, bubble.y, bubble.radius * size, bubble.color);
     }
   }
-  if (holdStarted !== null || burst < 1) animation = requestAnimationFrame(drawBubbles);
+  if (activeHold !== null || burst < 1) animation = requestAnimationFrame(drawBubbles);
 }
 
 window.addEventListener('resize', () => {
@@ -169,7 +170,7 @@ function submit(index) {
   submitted = { correct: index === question.correct, explanation: question.explanation };
   deadline = performance.now() + WAIT_MS;
   heldMs = 0;
-  holdStarted = null;
+  activeHold = null;
   burstStarted = -Infinity;
   stage.dataset.phase = 'waiting';
   redField.classList.add('waiting');
@@ -199,7 +200,7 @@ function reveal() {
   clearTimeout(escalation);
   cancelAnimationFrame(animation);
   animation = null;
-  holdStarted = null;
+  activeHold = null;
   speed.classList.remove('holding');
   ink.clearRect(0, 0, width, height);
   const moveFocus = document.activeElement === speed || burstStarted !== -Infinity;
@@ -213,39 +214,67 @@ function reveal() {
   title.textContent = submitted.correct ? 'Correct' : 'Incorrect';
   byId('explanation').textContent = submitted.explanation;
   byId('reflection').textContent = attempts === 0
-    ? 'You waited without holding the Spacebar.'
-    : 'You held the Spacebar ' + attempts + (attempts === 1 ? ' time.' : ' times.');
+    ? 'You waited without using Speed Up.'
+    : 'You held to speed up ' + attempts + (attempts === 1 ? ' time.' : ' times.');
   outcome.hidden = false;
   again.hidden = false;
   if (moveFocus) title.focus();
 }
 
+function startHold(input) {
+  const now = performance.now();
+  if (stage.dataset.phase !== 'waiting' || activeHold || burstStarted !== -Infinity || now >= deadline) return false;
+  activeHold = { input, startsAt: now + HOLD_THRESHOLD_MS, counted: false };
+  animation = requestAnimationFrame(drawBubbles);
+  return true;
+}
+
+function measureHold(now) {
+  if (!activeHold || now <= activeHold.startsAt) return 0;
+  if (!activeHold.counted) {
+    activeHold.counted = true;
+    attempts += 1;
+    speed.classList.add('holding');
+    response.textContent = 'Bubbles building…';
+  }
+  return now - activeHold.startsAt;
+}
+
+function pauseBubbles() {
+  if (!activeHold) return;
+  const now = performance.now();
+  const elapsed = now < deadline ? measureHold(now) : 0;
+  activeHold = null;
+  speed.classList.remove('holding');
+  cancelAnimationFrame(animation);
+  animation = null;
+  if (elapsed === 0) return;
+  heldMs = Math.min(FILL_MS, heldMs + elapsed);
+  response.textContent = 'Bubbles paused.';
+  drawBubbles(now);
+}
+
+speed.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0 || !event.isPrimary) return;
+  if (startHold(event.pointerId)) speed.setPointerCapture(event.pointerId);
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  speed.addEventListener(type, (event) => {
+    if (activeHold?.input === event.pointerId) pauseBubbles();
+  });
+}
+speed.addEventListener('contextmenu', (event) => event.preventDefault());
+
 window.addEventListener('keydown', (event) => {
   if (event.code !== 'Space' || stage.dataset.phase !== 'waiting') return;
   event.preventDefault();
-  if (event.repeat || holdStarted !== null || burstStarted !== -Infinity || performance.now() >= deadline) return;
-  attempts += 1;
-  holdStarted = performance.now();
-  speed.classList.add('holding');
-  response.textContent = 'Bubbles building…';
-  animation = requestAnimationFrame(drawBubbles);
+  if (!event.repeat) startHold('space');
 });
-
-function pauseBubbles() {
-  if (holdStarted === null) return;
-  const now = performance.now();
-  heldMs = Math.min(FILL_MS, heldMs + now - holdStarted);
-  holdStarted = null;
-  speed.classList.remove('holding');
-  response.textContent = 'Bubbles paused.';
-  cancelAnimationFrame(animation);
-  drawBubbles(now);
-}
 
 window.addEventListener('keyup', (event) => {
   if (event.code !== 'Space' || stage.dataset.phase !== 'waiting') return;
   event.preventDefault();
-  pauseBubbles();
+  if (activeHold?.input === 'space') pauseBubbles();
 });
 window.addEventListener('blur', pauseBubbles);
 
